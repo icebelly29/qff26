@@ -49,8 +49,8 @@ instance → prune → QUBO → verify vs brute force → QAOA → evaluate vs b
 
 ## 2. Instance (fixed, synthetic)
 
-Time: `T = 4` slots, slot index `τ ∈ {0,1,2,3}`, each slot `Δ = 1 h`.
-Electricity price per kWh by slot: `π = [0.30, 0.22, 0.15, 0.25]`.
+Time: T = 5 slots, slot index τ ∈ {0,1,2,3,4}, each slot Δ = 1 h.
+Electricity price per kWh by slot: π = [0.30, 0.22, 0.15, 0.18, 0.25].
 
 **Stations** (1 bay each, same charger power):
 
@@ -65,7 +65,7 @@ Electricity price per kWh by slot: `π = [0.30, 0.22, 0.15, 0.25]`.
 |---|---|---|---|---|---|---|---|
 | EV0 | 1 | 1 | 40 | 0.30 | 0.80 | 0 | 3 |
 | EV1 | 6 | 4 | 60 | 0.20 | 0.70 | 0 | 4 |
-| EV2 | 4 | 2 | 30 | 0.40 | 0.90 | 1 | 4 |
+| EV2 | 4 | 2 | 30 | 0.40 | 0.90 | 2 | 5 |
 
 **Weights:** travel `κ = 0.3` per km (Euclidean distance), waiting `ω = 0.5` per slot of delay, peak `μ = 0.01`.
 
@@ -90,7 +90,7 @@ A variable chooses the **start slot**. The charging duration is then fixed by `d
 ### 3.3 Pruning (classical preprocessing)
 Keep `v = (e, s, t)` only if `a_e ≤ t` and `t + d_e ≤ f_e`. Pruning removes variables that can never be feasible, which saves qubits.
 
-Expected for the fixed instance: EV0 starts ∈ {0,1}, EV1 starts ∈ {0,1}, EV2 starts ∈ {1,2}, each with 2 stations. **n = 12 qubits.** Hard limit: n ≤ 14.
+Expected for the fixed instance: EV0 starts ∈ {0,1}, EV1 starts ∈ {0,1}, EV2 starts ∈ {2,3}, each with 2 stations. **n = 12 qubits.** Hard limit: n ≤ 14.
 
 Variable index `i` = position in the list sorted lexicographically by `(e, s, t)`. Qubit `i` ↔ variable `i`.
 

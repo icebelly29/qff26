@@ -167,15 +167,15 @@ def get_fixed_instance() -> ProblemInstance:
             battery_kwh=30.0,
             soc_now=0.40,
             soc_target=0.90,
-            arrival_slot=1,
-            deadline_slot=4,
+            arrival_slot=2,
+            deadline_slot=5,
         ),
     ]
 
     return ProblemInstance(
-        num_slots=4,
+        num_slots=5,
         delta_hours=1.0,
-        prices=[0.30, 0.22, 0.15, 0.25],
+        prices=[0.30, 0.22, 0.15, 0.18, 0.25],
         stations=stations,
         evs=evs,
         kappa=0.3,

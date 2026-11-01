@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EV charging scheduler: QUBO demo</title>
+<style>
+:root{--bg:#fff;--sf:#f4f3ee;--tx:#1f1e1b;--mu:#6b6a64;--bd:#d8d6cc;--ok:#1f7a3d;--okb:#e3f2e6;--ng:#a32d2d;--ngb:#fbe9e9;--ac:#185fa5;--acb:#e6f1fb;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b19;--sf:#262623;--tx:#ecebe4;--mu:#a3a199;--bd:#3d3c37;--ok:#7fd49a;--okb:#1d3324;--ng:#f09595;--ngb:#3a1f1f;--ac:#85b7eb;--acb:#1c2b3d;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1b1b19;--sf:#262623;--tx:#ecebe4;--mu:#a3a199;--bd:#3d3c37;--ok:#7fd49a;--okb:#1d3324;--ng:#f09595;--ngb:#3a1f1f;--ac:#85b7eb;--acb:#1c2b3d;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+h2{font-size:16px;font-weight:500;margin:20px 0 8px}
+.sub{color:var(--mu);margin:0 0 12px;font-size:14px}
+button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{background:var(--sf)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.g{display:grid;grid-template-columns:48px repeat(4,minmax(0,1fr));gap:6px;align-items:stretch}
+.lab{font-weight:500;display:flex;align-items:center}
+.q{padding:6px 2px;line-height:1.3;font-size:13px;text-align:center}
+.q small{display:block;color:var(--mu);font-size:11px}
+.q.on{background:var(--acb);border-color:var(--ac);color:var(--ac);font-weight:500}
+.q.on small{color:var(--ac)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.chip{font-size:13px;padding:3px 10px;border-radius:8px}
+.ok{background:var(--okb);color:var(--ok)}.ng{background:var(--ngb);color:var(--ng)}
+.m{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.m div{background:var(--sf);border-radius:8px;padding:8px 12px}
+.m b{display:block;font-size:20px;font-weight:500}.m span{font-size:12px;color:var(--mu)}
+svg{width:100%;height:auto;display:block}
+svg text{fill:var(--tx);font:12px system-ui,sans-serif}
+.rows{display:flex;flex-direction:column;gap:4px;max-height:none}
+.r{display:flex;gap:10px;align-items:center;text-align:left;font-size:13px;padding:6px 10px}
+.r.cur{border-color:var(--ac);background:var(--acb)}
+.r i{font-style:normal;color:var(--mu);min-width:28px}
+.r b{font-weight:500;min-width:52px}
+.tag{font-size:11px;padding:1px 7px;border-radius:8px;background:var(--sf);color:var(--mu)}
+.note{font-size:13px;color:var(--mu);margin-top:16px}
+.scroll{overflow-x:auto;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
+</style><script src="results/qaoa_p1.js"></script></head><body><main>
+<h1>EV charging scheduler</h1>
+<p class="sub">3 EVs, 2 stations (1 bay each), 5 hourly slots. Each toggle is one qubit: “this EV starts charging at this station in this slot.” A 12-bit string is a complete schedule.</p>
+<div class="bar">
+<button id="p-opt">Optimal</button><button id="p-gr">Greedy-cost</button><button id="p-fc">FCFS</button><button id="p-cl">Clear</button>
+</div>
+<div class="g" id="grid"></div>
+<div class="chips" id="chips"></div>
+<div class="m" id="mx"></div>
+<h2>Schedule and grid load</h2>
+<svg id="gantt" viewBox="0 0 680 250" role="img" aria-label="Gantt chart of station bays by time slot, with stacked grid load per slot"></svg>
+<h2>QAOA circuit (p = 1, 12 qubits)</h2>
+<p class="sub" id="circcap"></p>
+<div class="scroll"><svg id="circ" viewBox="0 0 900 350" style="min-width:900px" role="img" aria-label="QAOA p=1 circuit: Hadamard layer, ZZ cost layer, RZ terms, RX mixer, measurement"></svg></div>
+<h2>QAOA result (p = 1, exact statevector, cached from <code>python -m src.qaoa</code>)</h2>
+<div id="qaoa"></div>
+<h2>All 16 feasible schedules, ranked (of 4096 bitstrings)</h2>
+<div class="rows" id="rows"></div>
+<p class="note">Cost units are synthetic. J is the true objective (energy, travel, waiting, plus a peak-load term). H adds the penalties for breaking a rule, so the lowest H is the best feasible schedule. Both heuristics are feasible but worse than the optimum.</p>
+</main>
+<script>
+const T=5,PR=[.30,.22,.15,.18,.25],ST=[[2,3],[7,1]],K=.3,W=.5,MU=.01,PW=11;
+const EVS=[{x:1,y:1,B:40,s0:.3,s1:.8,a:0,f:3},{x:6,y:4,B:60,s0:.2,s1:.7,a:0,f:4},{x:4,y:2,B:30,s0:.4,s1:.9,a:2,f:5}];
+const COL=['#185fa5','#0f6e56','#993c1d'];
+EVS.forEach(e=>{e.E=Math.round(e.B*(e.s1-e.s0)*1e6)/1e6;e.d=Math.ceil(e.E/PW-1e-9);e.p=e.E/e.d});
+const V=[];
+EVS.forEach((e,i)=>{for(let s=0;s<2;s++)for(let t=e.a;t<T;t++)if(t+e.d<=e.f)V.push({i:V.length,e:i,s,t})});
+const iv=v=>{const a=[];for(let k=0;k<EVS[v.e].d;k++)a.push(v.t+k);return a};
+V.forEach(v=>{const e=EVS[v.e];v.c=e.p*iv(v).reduce((a,k)=>a+PR[k],0)+K*Math.hypot(e.x-ST[v.s][0],e.y-ST[v.s][1])+W*(v.t-e.a)});
+const SP=EVS.reduce((a,e)=>a+e.p,0);
+const LAMB=Math.max(...V.map(v=>{const e=EVS[v.e];return v.c+MU*e.d*e.p*(e.p+2*(SP-e.p))}));
+const LAM=1.1*LAMB;
+const f2=x=>x.toFixed(2);
+function ev(x){
+const on=V.filter(v=>x[v.i]);const msgs=[];const bad=new Set();let pen=0;
+EVS.forEach((e,i)=>{const n=on.filter(v=>v.e===i).length;if(n!==1){msgs.push(`EV${i} has ${n} options on (needs exactly 1)`);pen+=LAM*(n-1)*(n-1)}});
+for(let a=0;a<on.length;a++)for(let b=a+1;b<on.length;b++){const u=on[a],w=on[b];if(u.e!==w.e&&u.s===w.s){const o=iv(u).filter(k=>iv(w).includes(k));if(o.length){msgs.push(`S${u.s}: EV${u.e} and EV${w.e} overlap in slot ${o[0]}`);bad.add(u.i);bad.add(w.i);pen+=LAM}}}
+const L=Array(T).fill(0);let en=0,tr=0,wt=0,cost=0;
+on.forEach(v=>{const e=EVS[v.e];iv(v).forEach(k=>{L[k]+=e.p;en+=e.p*PR[k]});tr+=K*Math.hypot(e.x-ST[v.s][0],e.y-ST[v.s][1]);wt+=W*(v.t-e.a);cost+=v.c});
+const J=cost+MU*L.reduce((a,l)=>a+l*l,0);
+return{on,msgs,bad,L,en,tr,wt,J,H:J+pen,feas:msgs.length===0,peak:Math.max(...L)};
+}
+const key=x=>x.join('');
+const grp=[0,1,2].map(e=>V.filter(v=>v.e===e));
+const feas=[];
+for(const a of grp[0])for(const b of grp[1])for(const c of grp[2]){const x=Array(V.length).fill(0);x[a.i]=x[b.i]=x[c.i]=1;const r=ev(x);if(r.feas)feas.push({x,J:r.J})}
+feas.sort((a,b)=>a.J-b.J);
+const JOPT=feas[0].J;
+const mk=l=>{const x=Array(V.length).fill(0);l.forEach(([e,s,t])=>{const v=V.find(v=>v.e===e&&v.s===s&&v.t===t);x[v.i]=1});return x};
+const GR=mk([[0,0,1],[1,1,1],[2,0,3]]),FC=mk([[0,0,0],[1,1,0],[2,0,2]]);
+let X=feas[0].x.slice();
+const $=id=>document.getElementById(id);
+function gantt(r){
+const x0=72,cw=118;let s='';
+for(let t=0;t<T;t++){s+=`<text x="${x0+t*cw+cw/2}" y="14" text-anchor="middle">slot ${t}</text><text x="${x0+t*cw+cw/2}" y="28" text-anchor="middle" style="fill:var(--mu)">price ${PR[t].toFixed(2)}</text>`}
+for(let st=0;st<2;st++){const y=38+st*54;s+=`<text x="4" y="${y+26}">Station ${st}</text><rect x="${x0}" y="${y}" width="${cw*T}" height="46" rx="6" style="fill:var(--sf)"/>`;
+for(let t=1;t<T;t++)s+=`<line x1="${x0+t*cw}" x2="${x0+t*cw}" y1="${y}" y2="${y+46}" style="stroke:var(--bd)"/>`}
+r.on.forEach(v=>{const y=38+v.s*54,e=EVS[v.e],bad=r.bad.has(v.i);s+=`<rect x="${x0+v.t*cw+2}" y="${y+3}" width="${e.d*cw-4}" height="40" rx="6" fill="${COL[v.e]}" ${bad?'stroke="#e24b4a" stroke-width="3"':''} opacity="${bad?.85:1}"/><text x="${x0+v.t*cw+10}" y="${y+27}" style="fill:#fff">EV${v.e} · ${e.p} kW</text>`});
+const base=236;s+=`<text x="4" y="170">Grid load</text><text x="4" y="186" style="fill:var(--mu)">kW per slot</text><line x1="${x0}" x2="${x0+cw*T}" y1="${base}" y2="${base}" style="stroke:var(--bd)"/>`;
+for(let t=0;t<T;t++){let y=base;r.on.forEach(v=>{if(iv(v).includes(t)){const h=EVS[v.e].p*2;y-=h;s+=`<rect x="${x0+t*cw+24}" y="${y}" width="${cw-48}" height="${h}" fill="${COL[v.e]}"/>`}});
+s+=`<text x="${x0+t*cw+cw/2}" y="${y-5}" text-anchor="middle">${r.L[t]?r.L[t]+' kW':''}</text>`}
+$('gantt').innerHTML=s;
+}
+function circuit(){
+/* ZZ couplings of the QUBO: same-EV pairs (E3), plus any pair whose charging slots overlap (E4 bay conflicts and the peak-load term). */
+const P=[];for(let a=0;a<V.length;a++)for(let b=a+1;b<V.length;b++){const u=V[a],w=V[b];if(u.e===w.e||iv(u).some(k=>iv(w).includes(k)))P.push([a,b])}
+/* Place each ZZ gate in the first column where its vertical span does not touch another gate. */
+const cols=[];P.forEach(([a,b])=>{const c=cols.find(c=>c.every(([x,y])=>y<a||x>b));c?c.push([a,b]):cols.push([[a,b]])});
+const n=V.length,x0=64,cw=26,wy=i=>40+i*25;
+const xH=x0+14,xZ=i=>x0+56+i*cw,xR=x0+56+cols.length*cw+22,xX=xR+46,xM=xX+46,end=xM+34;
+let s='';
+/* wires and qubit labels (blue label = qubit currently set to 1) */
+for(let i=0;i<n;i++){const on=X[i]===1;s+=`<line x1="${x0}" x2="${end}" y1="${wy(i)}" y2="${wy(i)}" style="stroke:var(--bd)"/><text x="4" y="${wy(i)+4}" style="${on?'fill:var(--ac);font-weight:600':''}">q${i} ${on?'=1':''}</text><text x="40" y="${wy(i)+4}" style="fill:${COL[V[i].e]}">EV${V[i].e}</text>`}
+/* block headers */
+const hd=(x,t)=>`<text x="${x}" y="14" text-anchor="middle" style="fill:var(--mu)">${t}</text>`;
+s+=hd(xH,'H')+hd((xZ(0)+xZ(cols.length-1))/2,`cost layer: ${P.length} × RZZ(2γ·J)`)+hd(xR,'RZ(2γ·h)')+hd(xX,'RX(2β)')+hd(xM,'measure');
+const box=(x,y,t,c)=>`<rect x="${x-10}" y="${y-10}" width="20" height="20" rx="4" style="fill:var(--sf);stroke:${c||'var(--ac)'}"/><text x="${x}" y="${y+4}" text-anchor="middle" style="font-size:10px">${t}</text>`;
+for(let i=0;i<n;i++){s+=box(xH,wy(i),'H')+box(xR,wy(i),'Rz')+box(xX,wy(i),'Rx')}
+/* ZZ gates: dot, line, dot */
+cols.forEach((c,ci)=>c.forEach(([a,b])=>{const x=xZ(ci),same=V[a].e===V[b].e;const col=same?'#993c1d':'var(--ac)';s+=`<line x1="${x}" x2="${x}" y1="${wy(a)}" y2="${wy(b)}" style="stroke:${col};stroke-width:1.5"/><circle cx="${x}" cy="${wy(a)}" r="3.5" style="fill:${col}"/><circle cx="${x}" cy="${wy(b)}" r="3.5" style="fill:${col}"/>`}));
+/* measurement boxes */
+for(let i=0;i<n;i++)s+=`<rect x="${xM-10}" y="${wy(i)-10}" width="20" height="20" rx="4" style="fill:var(--sf);stroke:var(--mu)"/><path d="M${xM-6} ${wy(i)+4}a6 6 0 0 1 12 0" style="fill:none;stroke:var(--mu)"/><line x1="${xM}" y1="${wy(i)+4}" x2="${xM+4}" y2="${wy(i)-4}" style="stroke:var(--mu)"/>`;
+$('circ').innerHTML=s;$('circ').setAttribute('viewBox',`0 0 ${end+16} 350`);$('circ').style.minWidth=(end+16)+'px';
+$('circcap').innerHTML=`One layer (p = 1): Hadamards put every qubit in superposition, the cost layer applies the penalties and costs as ${P.length} two-qubit ZZ rotations (orange = same-EV pairs from the “exactly one start” rule, blue = bay overlaps and the peak-load term) plus ${n} single-qubit RZ, then the RX mixer. The classical optimizer tunes γ and β (best found: γ = ${window.QAOA_P1?QAOA_P1.optimal_params.gamma_0.toFixed(4):'?'}, β = ${window.QAOA_P1?QAOA_P1.optimal_params.beta_0.toFixed(4):'?'}). Qubit order matches the toggles above.`;
+}
+/* Qiskit bitstrings are little-endian: the rightmost character is qubit 0. */
+const toX=bs=>Array.from({length:V.length},(_,i)=>+bs[bs.length-1-i]);
+const bsOf=x=>x.slice().reverse().join('');
+function lb(bs){X=toX(bs);render()}
+function qaoa(){
+const Q=window.QAOA_P1,el=$('qaoa');
+if(!Q){el.innerHTML='<p class="note">No cached QAOA results found. Run <code>python -m src.qaoa</code> to create results/qaoa_p1.js.</p>';return}
+const pc=x=>(x*100).toFixed(2)+'%',cur=bsOf(X),mp=Q.most_probable_feasible;
+const card=(b,s)=>`<div><b>${b}</b><span>${s}</span></div>`;
+let h=`<div class="m">${card(pc(Q.P_feasible),`P(feasible) · uniform ${pc(Q.uniform_P_feasible)} (${Q.feasibility_enhancement.toFixed(1)}× more)`)}${card(pc(Q.P_optimal),`P(optimal) · uniform ${pc(Q.uniform_P_optimal)} (${Q.optimality_enhancement.toFixed(1)}× more)`)}${card(Q.expected_H.toFixed(1),'⟨H⟩ at convergence')}${card(f2(mp.J),`J of most probable feasible (rank #${mp.feas_rank})`)}</div>`;
+const bars=[['P(feasible)',Q.P_feasible,Q.uniform_P_feasible],['P(optimal)',Q.P_optimal,Q.uniform_P_optimal]];
+h+=`<svg viewBox="0 0 680 120" style="margin-top:12px" role="img" aria-label="QAOA probability versus uniform random guessing">`+bars.map(([n,q,u],i)=>{const y=8+i*58,m=Math.max(q,u),w=v=>Math.max(2,v/m*380);return `<text x="4" y="${y+14}">${n}</text><rect x="96" y="${y}" width="${w(q)}" height="20" rx="4" style="fill:var(--ac)"/><text x="${104+w(q)}" y="${y+15}">QAOA ${pc(q)}</text><rect x="96" y="${y+25}" width="${w(u)}" height="20" rx="4" style="fill:var(--bd)"/><text x="${104+w(u)}" y="${y+40}" style="fill:var(--mu)">uniform ${pc(u)}</text>`}).join('')+`</svg>`;
+h+=`<h2>Top 10 bitstrings by probability (click to load)</h2><div class="rows">`+Q.top_10_bitstrings.map(r=>`<button class="r ${r.bitstring===cur?'cur':''}" onclick="lb('${r.bitstring}')"><i>#${r.rank}</i><b>${pc(r.probability)}</b><span style="font-family:ui-monospace,monospace">${r.bitstring}</span><span class="tag">${r.feasible?'feasible, J '+f2(r.J):'infeasible'}</span></button>`).join('')+`</div>`;
+const mx=Math.max(...Q.feasible_distribution.map(r=>r.probability));
+h+=`<h2>Where the probability lands among the 16 feasible schedules</h2><div class="rows">`+Q.feasible_distribution.map(r=>`<button class="r ${r.bitstring===cur?'cur':''}" onclick="lb('${r.bitstring}')"><i>#${r.feas_rank}</i><b>${f2(r.J)}</b><span style="flex:1"><span style="display:block;height:8px;border-radius:4px;background:var(--ac);width:${Math.max(1,r.probability/mx*100)}%"></span></span><span>${pc(r.probability)}</span></button>`).join('')+`</div>`;
+h+=`<p class="note">Read this honestly: at p = 1 about ${pc(1-Q.P_feasible)} of the probability sits on schedules that break a rule, and the single most likely bitstring is all zeros (nobody charges). QAOA raises the chance of a feasible schedule about ${Q.feasibility_enhancement.toFixed(0)}× over random guessing, but it is not a solver yet: the optimum is found only by sampling and then checking feasibility. Values come from an exact statevector, not shots, and are cached so this page never runs a quantum job.</p>`;
+el.innerHTML=h;
+}
+function render(){
+const r=ev(X);
+$('grid').innerHTML=[0,1,2].map(e=>`<div class="lab">EV${e}</div>`+grp[e].map(v=>`<button class="q ${X[v.i]?'on':''}" onclick="tg(${v.i})">q${v.i}=${X[v.i]}<small>S${v.s} · slot ${v.t}</small></button>`).join('')).join('');
+$('chips').innerHTML=(r.feas?'<span class="chip ok">Feasible schedule</span>':'')+r.msgs.map(m=>`<span class="chip ng">${m}</span>`).join('');
+const gap=r.feas?((r.J-JOPT)/JOPT*100):null;
+$('mx').innerHTML=r.feas?`<div><b>${f2(r.J)}</b><span>Total objective J</span></div><div><b>${gap<0.005?'Optimal':'+'+gap.toFixed(2)+'%'}</b><span>Gap to optimal (${f2(JOPT)})</span></div><div><b>${r.peak} kW</b><span>Peak grid load</span></div><div><b>${f2(r.en)}</b><span>Energy cost</span></div><div><b>${r.wt/W}</b><span>Waiting slots</span></div>`:`<div><b>${f2(r.H)}</b><span>Energy H with penalties (λ = ${f2(LAM)})</span></div><div><b>${f2(r.J)}</b><span>Cost J of chosen options</span></div>`;
+gantt(r);
+circuit();
+qaoa();
+$('rows').innerHTML=feas.map((q,i)=>{const k=key(q.x),on=V.filter(v=>q.x[v.i]);const tag=k===key(GR)?'<span class="tag">greedy-cost</span>':k===key(FC)?'<span class="tag">FCFS</span>':'';
+return`<button class="r ${k===key(X)?'cur':''}" onclick="ld(${i})"><i>#${i+1}</i><b>${f2(q.J)}</b><span>${on.map(v=>`EV${v.e} S${v.s}@${v.t}`).join(' · ')}</span>${tag}</button>`}).join('');
+}
+function tg(i){X[i]^=1;render()}
+function ld(i){X=feas[i].x.slice();render()}
+$('p-opt').onclick=()=>{X=feas[0].x.slice();render()};
+$('p-gr').onclick=()=>{X=GR.slice();render()};
+$('p-fc').onclick=()=>{X=FC.slice();render()};
+$('p-cl').onclick=()=>{X=Array(V.length).fill(0);render()};
+render();
+</script></body></html>
