@@ -15,8 +15,10 @@ h2{font-size:16px;font-weight:500;margin:20px 0 8px}
 button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
 button:hover{background:var(--sf)}
 .bar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
-.g{display:grid;grid-template-columns:48px repeat(4,minmax(0,1fr));gap:6px;align-items:stretch}
-.lab{font-weight:500;display:flex;align-items:center}
+.g{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.ev-row{display:grid;grid-template-columns:48px 1fr;gap:8px;align-items:center}
+.lab{font-weight:600;display:flex;align-items:center}
+.ev-btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(85px,1fr));gap:6px}
 .q{padding:6px 2px;line-height:1.3;font-size:13px;text-align:center}
 .q small{display:block;color:var(--mu);font-size:11px}
 .q.on{background:var(--acb);border-color:var(--ac);color:var(--ac);font-weight:500}
@@ -190,7 +192,7 @@ el.innerHTML=h;
 
 function render(){
 const r=ev(X);
-$('grid').innerHTML=[0,1,2].map(e=>`<div class="lab">EV${e}</div>`+grp[e].map(v=>`<button class="q ${X[v.i]?'on':''}" onclick="tg(${v.i})">q${v.i}=${X[v.i]}<small>S${v.s} · slot ${v.t}</small></button>`).join('')).join('');
+$('grid').innerHTML=[0,1,2].map(e=>`<div class="ev-row"><div class="lab">EV${e}</div><div class="ev-btns">${grp[e].map(v=>`<button class="q ${X[v.i]?'on':''}" onclick="tg(${v.i})">q${v.i}=${X[v.i]}<small>S${v.s} · slot ${v.t}</small></button>`).join('')}</div></div>`).join('');
 $('chips').innerHTML=(r.feas?'<span class="chip ok">Feasible schedule</span>':'')+r.msgs.map(m=>`<span class="chip ng">${m}</span>`).join('');
 const gap=r.feas?((r.J-JOPT)/JOPT*100):null;
 $('mx').innerHTML=r.feas?`<div><b>${f2(r.J)}</b><span>Total objective J</span></div><div><b>${gap<0.005?'QAOA / Optimal':'+'+gap.toFixed(2)+'%'}</b><span>Gap to optimal (${f2(JOPT)})</span></div><div><b>${r.peak} kW</b><span>Peak grid load</span></div><div><b>${f2(r.en)}</b><span>Energy cost</span></div><div><b>${f2(r.wt/W)}</b><span>Waiting slots</span></div>`:`<div><b>${f2(r.H)}</b><span>Energy H with penalties (λ = ${f2(LAM)})</span></div><div><b>${f2(r.J)}</b><span>Cost J of chosen options</span></div>`;
