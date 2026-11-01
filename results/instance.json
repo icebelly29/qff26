@@ -36,7 +36,7 @@
       "soc_now": 0.3,
       "soc_target": 0.8,
       "arrival_slot": 0,
-      "deadline_slot": 3
+      "deadline_slot": 4
     },
     {
       "id": 1,

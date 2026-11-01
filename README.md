@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-This project formulates and solves the Electric Vehicle (EV) Charging Scheduling Problem using Quantum Approximate Optimization Algorithm (QAOA) mapped to a Quadratic Unconstrained Binary Optimization (QUBO) model.
+This project formulates and solves the Electric Vehicle (EV) Charging Scheduling Problem using the Quantum Approximate Optimization Algorithm (QAOA) mapped to a Quadratic Unconstrained Binary Optimization (QUBO) model.
 
 The objective is to optimize the charging schedules of heterogeneous electric vehicles across distributed charging stations to:
 1. **Minimize energy purchase costs** under time-varying electricity prices ($\pi_\tau$).
@@ -34,10 +34,10 @@ flowchart LR
 ```
 
 The pipeline enforces reproducible, gate-driven execution:
-- **Pruning**: Reduces variable space from 30 to **12 qubits** ($n \le 14$).
+- **Pruning**: Reduces variable space to **14 qubits** ($n \le 14$ hard budget).
 - **Analytical Bound ($\Lambda$)**: Computes minimum penalty $\lambda = 1.1\Lambda$ so constraints are never violated at optimum.
 - **V2 Primitives**: Exact statevector expectation with `StatevectorEstimator` and `QAOAAnsatz`.
-- **Classical Baselines**: Ground truth brute force (4096 states), First-Come First-Served (FCFS), and Greedy-Cost.
+- **Classical Baselines**: Ground truth brute force (16,384 states), First-Come First-Served (FCFS), and Greedy-Cost.
 
 ---
 
@@ -78,7 +78,7 @@ Setting $\lambda_A = \lambda_O = 1.1 \cdot \Lambda = 23.580625$ guarantees that 
 ### 3.5 Ising Mapping
 Substituting $x_i = \frac{1 - Z_i}{2}$ yields the diagonal Hamiltonian:
 $$H_C = \sum_i h_i Z_i + \sum_{i < j} J_{ij} Z_i Z_j + \text{offset}$$
-For $n = 12$ variables, the operator contains 12 single-qubit $Z$ terms and 50 two-qubit $ZZ$ interaction terms with offset $+409.8055$.
+For $n = 14$ variables, the operator contains 14 single-qubit $Z$ terms and 75 two-qubit $ZZ$ interaction terms.
 
 ---
 
@@ -89,16 +89,16 @@ $$|\psi(\vec{\gamma}, \vec{\beta})\rangle = \prod_{l=1}^p e^{-i \beta_l \sum_i X
 
 ![QAOA Circuit Diagram](results/qaoa_circuit.png)
 
-### Transpiled Gate Complexity & Depth Analysis
+### Transpiled Gate Complexity & Depth Analysis ($n = 14$ Qubits)
 Target basis: `{rz, sx, x, cx}`.
 
 | Circuit Depth | Transpiled Depth | CNOT ($CX$) Count | Single-Qubit Gates | Total Operations |
 |:---:|:---:|:---:|:---:|:---:|
-| **$p = 1$** | 72 | 100 | 157 | 257 |
-| **$p = 2$** | 114 | 200 | 278 | 478 |
-| **$p = 3$** | 156 | 300 | 399 | 699 |
+| **$p = 1$** | 84 | 150 | 200 | 350 |
+| **$p = 2$** | 132 | 300 | 358 | 658 |
+| **$p = 3$** | 180 | 450 | 516 | 966 |
 
-*Note:* Each of the 50 $ZZ$ Pauli terms decomposes into 2 CNOT gates and 1 $R_Z$ rotation ($50 \times 2 = 100$ CNOTs per layer).
+*Note:* Each of the 75 $ZZ$ Pauli interaction terms decomposes into 2 CNOT gates and 1 $R_Z$ rotation ($75 \times 2 = 150$ CNOTs per layer).
 
 ---
 
@@ -109,11 +109,11 @@ Target basis: `{rz, sx, x, cx}`.
 | Method | Feasible | $J$ (\$) | Gap to Opt (%) | Energy Cost (\$) | Travel Cost (\$) | Wait Cost (\$) | Total Wait (slots) | Max Wait (slots) | Peak Load (kW) | Load Var | Avg Bay Util | Runtime (s) | $P(\text{opt})$ (%) | $P(\text{feas})$ (%) |
 |:---|:---|---:|:---|---:|---:|---:|---:|---:|---:|---:|:---|---:|:---|:---|
 | **Brute Force** | True | **26.8403** | **0.00%** | 13.9250 | 2.2903 | 1.0000 | 2 | 1 | 20.0 | 23.5 | 70.0% | 0.050 | - | - |
-| **Greedy-cost** | True | 27.8403 | +3.73% | 12.4250 | 2.2903 | 1.5000 | 3 | 1 | 20.0 | 63.5 | 70.0% | 0.001 | - | - |
+| **Greedy-cost** | True | 27.0903 | +0.93% | 13.1750 | 2.2903 | 0.5000 | 1 | 1 | 20.0 | 53.5 | 70.0% | 0.001 | - | - |
 | **FCFS** | True | 28.2903 | +5.40% | 14.3750 | 2.2903 | 0.0000 | 0 | 0 | 20.0 | 63.5 | 70.0% | 0.001 | - | - |
-| **QAOA ($p=1$)** | True | **26.8403** | **0.00%** | 13.9250 | 2.2903 | 1.0000 | 2 | 1 | 20.0 | 23.5 | 70.0% | 12.0 | 0.4015% | 5.95% |
-| **QAOA ($p=2$)** | True | 27.0903 | +0.93% | 13.1750 | 2.2903 | 0.5000 | 1 | 1 | 20.0 | 53.5 | 70.0% | 35.0 | 0.3578% | 5.67% |
-| **QAOA ($p=3$)** | True | 28.3182 | +5.51% | 15.1250 | 2.5682 | 0.5000 | 1 | 1 | 20.0 | 33.5 | 70.0% | 75.0 | **0.9189%** | **13.57%** |
+| **QAOA ($p=1$)** | True | 28.3182 | +5.51% | 15.1250 | 2.5682 | 0.5000 | 1 | 1 | 20.0 | 33.5 | 70.0% | 12.0 | 0.2300% | 3.89% |
+| **QAOA ($p=2$)** | True | 28.0578 | +4.54% | 13.2250 | 3.7078 | 1.5000 | 3 | 2 | 20.0 | 23.5 | 70.0% | 35.0 | 0.1268% | 2.21% |
+| **QAOA ($p=3$)** | True | 28.3182 | +5.51% | 15.1250 | 2.5682 | 0.5000 | 1 | 1 | 20.0 | 33.5 | 70.0% | 75.0 | **0.4818%** | **7.96%** |
 
 ---
 
@@ -127,7 +127,7 @@ Comparing station occupancies across time slots:
 Comparing slot-by-slot grid charging load:
 ![Grid Load](results/grid_load.png)
 
-*Key Finding:* Greedy-Cost creates a concentrated peak load of 20 kW at slot 2 (load variance 63.5). The Brute Force and QAOA optimal schedules smooth the charging curve (load variance 23.5), directly validating the QUBO peak proxy term.
+*Key Finding:* FCFS and Greedy create load spikes with high variance ($63.5$ and $53.5$), while the Brute Force and QAOA schedules smooth charging demand across bays (variance $23.5$ and $33.5$).
 
 ---
 
@@ -136,17 +136,17 @@ Comparing slot-by-slot grid charging load:
 #### Convergence Trajectory ($\langle H \rangle$ vs. Iteration)
 ![QAOA Convergence](results/qaoa_convergence.png)
 
-- Expected energy drops monotonically with depth:
-  - $p=1$: $\langle H \rangle = 65.7614$
-  - $p=2$: $\langle H \rangle = 55.5915$
-  - $p=3$: $\langle H \rangle = 51.6248$
-- At $p=3$, parameter warm-starting from $p=2$ outperformed all 10 random restarts.
+- Expected energy decreases steadily across depths:
+  - $p=1$: $\langle H \rangle = 71.3016$
+  - $p=2$: $\langle H \rangle = 59.5872$
+  - $p=3$: $\langle H \rangle = 53.4994$
+- Parameter warm-starting at $p=3$ from depth $p=2$ outperformed all random restarts.
 
-#### Success and Feasibility Probabilities vs. Depth
+#### Success and Feasibility Probabilities vs. Depth ($n = 14$)
 ![Probability Scaling](results/p_sweep_probabilities.png)
 
-- **$P(\text{feasible})$**: Grows from $0.39\%$ (uniform random baseline) $\to 5.95\%$ ($p=1$) $\to \mathbf{13.57\%}$ ($p=3$) (**34.7x enhancement**).
-- **$P(\text{optimal})$**: Climbs from $0.024\%$ (uniform baseline) $\to 0.4015\%$ ($p=1$) $\to \mathbf{0.9189\%}$ ($p=3$) (**37.7x enhancement**).
+- **$P(\text{feasible})$**: Climbs to **$7.9621\%$** at $p=3$ (**72.4x enhancement** over the 14-qubit uniform baseline of $18 / 16384 = 0.110\%$).
+- **$P(\text{optimal})$**: Reaches **$0.4818\%$** at $p=3$ (**79.0x enhancement** over uniform $1 / 16384 = 0.0061\%$).
 
 ---
 
@@ -155,40 +155,37 @@ Comparing slot-by-slot grid charging load:
 #### Penalty Weight ($\lambda$) Sensitivity Curve
 ![Penalty Sweep](results/lambda_sweep.png)
 
-- At $\lambda < 1.0\Lambda$, penalty under-weighting yields higher infeasibility.
-- At $\lambda \ge 1.5\Lambda$, high penalty values flatten the landscape gradients, causing the optimizer to favor generic feasible states over the cost-optimal state. The analytical setting $\lambda = 1.1\Lambda$ correctly locates the ground state.
+The sweep demonstrates the theoretical trade-off: under-weighting ($\lambda < 1.0\Lambda$) leads to constraint violations, while excessive penalty weighting ($\lambda > 2.0\Lambda$) flattens the energy landscape. The analytical default $\lambda = 1.1\Lambda$ reliably guarantees feasibility while maintaining optimization gradients.
 
 #### Readout Bitstring Histogram ($p = 1$)
 ![Top Bitstrings](results/top_bitstrings_hist.png)
-
-The most probable feasible bitstring decoded from the statevector is `001010000001` (Feasible Rank 1, matching the brute-force ground truth $J^* = 26.8403$).
 
 ---
 
 ## 6. Hardware Feasibility & Noisy Aer Simulation
 
-To assess NISQ realism, an Aer depolarizing noise model was evaluated on the transpiled circuit:
-- Single-qubit gate depolarizing error: $0.1\%$
+An Aer depolarizing noise model was evaluated on the 14-qubit transpiled circuit:
+- Single-qubit depolarizing error: $0.1\%$
 - Two-qubit gate ($CX$) depolarizing error: $1.0\%$
 - Shots: 8192 using noiseless optimal parameters
 
 | Metric | Ideal Statevector ($p=1$) | Aer Noisy Simulation ($p=1$, 8192 shots) |
 |---|:---:|:---:|
-| $P(\text{optimal})$ | 0.4015% | 0.0244% (2 / 8192) |
-| $P(\text{feasible})$ | 5.9531% | 0.2808% (23 / 8192) |
+| $P(\text{optimal})$ | 0.2300% | 0.0000% (0 / 8192) |
+| $P(\text{feasible})$ | 3.8893% | 0.1099% (9 / 8192) |
 
-*Observation:* With 100 CNOT gates at $p=1$, accumulated circuit fidelity scales as $\approx (1 - 0.01)^{100} \approx 0.366$. Unmitigated physical noise suppresses the quantum probability enhancement down near the uniform baseline ($0.39\%$), highlighting error mitigation and low-depth ansatzes as essential prerequisites for physical hardware execution.
+*Observation:* With 150 CNOT gates at $p=1$ on 14 qubits, the accumulated circuit fidelity drops significantly under unmitigated physical gate noise. $P(\text{feasible})$ approaches the random guessing baseline ($0.110\%$), underscoring the critical need for error mitigation on physical NISQ processors.
 
 ---
 
 ## 7. Honest Limitations & Scalability
 
-1. **No Quantum Advantage at $n = 12$:**
-   At 12 qubits, classical brute force enumerates all 4096 states in 50 ms. QAOA is studied as an algorithmic framework, not a superior classical replacement for small instances.
+1. **No Quantum Advantage at $n = 14$:**
+   At 14 qubits, classical brute force enumerates all 16,384 states in 50 ms. QAOA is benchmarked to study algorithm mechanics, convergence properties, and depth trade-offs.
 2. **Qubit Scaling:**
-   Variables scale as $O(E \cdot S \cdot T)$. Without pruning, an instance with 20 EVs, 5 stations, and 24 hours would require 2400 qubits. Scalable deployment requires classical clustering or problem decomposition into small subproblems.
-3. **Co-optimization Landscape:**
-   Balancing multiple objective weights ($\kappa, \omega, \mu$) with constraint penalties ($\lambda_A, \lambda_O$) creates rugged landscapes where classical optimizers (like COBYLA) can experience local traps without warm starts.
+   Variables scale as $O(E \cdot S \cdot T)$. Without pruning, scaling beyond 20 EVs requires problem decomposition or classical hybrid clustering.
+3. **Landscape Trapping:**
+   At higher depths and larger qubit counts, classical optimizers (like COBYLA) can experience local traps without warm starts.
 
 ---
 

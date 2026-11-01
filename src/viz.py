@@ -423,7 +423,8 @@ def generate_circuit_and_transpilation_report(
 
     num_qubits = len(variables)
     y_coords = np.linspace(num_qubits - 1, 0, num_qubits)
-    wire_colors = ["#1f77b4"] * 4 + ["#2ca02c"] * 4 + ["#ff7f0e"] * 4
+    ev_colors_map = {0: "#1f77b4", 1: "#2ca02c", 2: "#ff7f0e"}
+    wire_colors = [ev_colors_map.get(variables[i][0], "#7f7f7f") for i in range(num_qubits)]
 
     for i, y in enumerate(y_coords):
         ev_idx, s, t = variables[i]
@@ -550,7 +551,8 @@ def generate_circuit_and_transpilation_report(
         job_result = sim.run(t_bound, shots=shots).result()
         counts = job_result.get_counts()
 
-        opt_bitstring = "001010000001"
+        bf_tmp = brute_force_solve(instance, variables, lambda_val, lambda_val)
+        opt_bitstring = bf_tmp["best_H_bitstring"]
         n_opt = counts.get(opt_bitstring, 0)
         n_feas = sum(cnt for bs, cnt in counts.items() if score_bitstring(instance, variables, bs)["feasible"])
 
