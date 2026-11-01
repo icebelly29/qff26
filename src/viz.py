@@ -13,6 +13,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.patches as patches
+import matplotlib.lines as mlines
 import numpy as np
 
 from qiskit import transpile
@@ -403,11 +405,110 @@ def generate_circuit_and_transpilation_report(
     qp = build_quadratic_program(instance, variables, lambda_a=lambda_val, lambda_o=lambda_val)
     H_C, offset = qubo_to_ising(qp)
 
-    # 1. Render QAOA circuit diagram at p = 1
-    ansatz_p1 = QAOAAnsatz(cost_operator=H_C, reps=1)
-    decomp_p1 = ansatz_p1.decompose()
-    fig = decomp_p1.draw(output="mpl", style="clifford")
-    fig.savefig(out_circuit_path, bbox_inches="tight", dpi=300)
+    # 1. Render QAOA circuit diagram and interaction topology at p = 1
+    # Extract ZZ interactions
+    zz_edges = []
+    for pauli, coeff in zip(H_C.paulis, H_C.coeffs):
+        label = pauli.to_label()
+        indices = [i for i, c in enumerate(reversed(label)) if c == "Z"]
+        if len(indices) == 2:
+            zz_edges.append((indices[0], indices[1], float(np.real(coeff))))
+
+    fig = plt.figure(figsize=(16, 8), dpi=200)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.25, 1.0], wspace=0.18)
+
+    # --- PANEL 1: Circuit Flow Diagram ---
+    ax1 = fig.add_subplot(gs[0])
+    ax1.set_title("(a) QAOA Ansatz Architecture (p = 1, 12 Qubits)", fontsize=13, fontweight="bold", pad=12)
+
+    num_qubits = len(variables)
+    y_coords = np.linspace(num_qubits - 1, 0, num_qubits)
+    wire_colors = ["#1f77b4"] * 4 + ["#2ca02c"] * 4 + ["#ff7f0e"] * 4
+
+    for i, y in enumerate(y_coords):
+        ev_idx, s, t = variables[i]
+        ax1.plot([0, 10], [y, y], color="#888888", linewidth=1.2, zorder=1)
+        ax1.text(-0.2, y, f"q{i}", ha="right", va="center", fontsize=9, fontweight="bold", color=wire_colors[i])
+        ax1.text(-0.6, y, f"EV{ev_idx} S{s}@{t}", ha="right", va="center", fontsize=8, color="#555555")
+
+    for y in y_coords:
+        rect = patches.FancyBboxPatch((0.8, y - 0.35), 0.7, 0.7, boxstyle="round,pad=0.05", facecolor="#e6f1fb", edgecolor="#185fa5", linewidth=1.5, zorder=2)
+        ax1.add_patch(rect)
+        ax1.text(1.15, y, "H", ha="center", va="center", fontsize=9, fontweight="bold", color="#185fa5")
+
+    cost_box = patches.FancyBboxPatch((2.2, -0.6), 3.2, num_qubits + 0.2, boxstyle="round,pad=0.1", facecolor="#fbfbf8", edgecolor="#a32d2d", linewidth=2, linestyle="--", zorder=2)
+    ax1.add_patch(cost_box)
+    ax1.text(3.8, num_qubits - 0.2, "Cost Unitary U(H_C, gamma) = exp(-i gamma H_C)", ha="center", va="bottom", fontsize=10, fontweight="bold", color="#a32d2d")
+    ax1.text(3.8, num_qubits / 2 - 0.5, "50 x RZZ(2*gamma*J_ij) Couplings\n+\n12 x RZ(2*gamma*h_i) Rotations", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#333333", bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="#d8d6cc", alpha=0.95))
+
+    for y in y_coords:
+        rect = patches.FancyBboxPatch((6.0, y - 0.35), 1.0, 0.7, boxstyle="round,pad=0.05", facecolor="#e3f2e6", edgecolor="#1f7a3d", linewidth=1.5, zorder=2)
+        ax1.add_patch(rect)
+        ax1.text(6.5, y, "Rx(2b)", ha="center", va="center", fontsize=8, fontweight="bold", color="#1f7a3d")
+
+    for y in y_coords:
+        rect = patches.FancyBboxPatch((7.6, y - 0.35), 0.7, 0.7, boxstyle="round,pad=0.05", facecolor="#ecebe4", edgecolor="#6b6a64", linewidth=1.5, zorder=2)
+        ax1.add_patch(rect)
+        ax1.text(7.95, y, "M", ha="center", va="center", fontsize=9, fontweight="bold", color="#444444")
+
+    decomp_box = patches.FancyBboxPatch((0.2, -3.2), 8.5, 2.0, boxstyle="round,pad=0.1", facecolor="#ffffff", edgecolor="#999999", linewidth=1, zorder=2)
+    ax1.add_patch(decomp_box)
+    ax1.text(4.45, -1.6, "Transpilation Primitive: RZZ(theta) = CNOT -> Rz(theta) -> CNOT", ha="center", va="center", fontsize=9, fontweight="bold", color="#222222")
+    ax1.text(4.45, -2.15, "50 ZZ terms -> 100 CNOTs per QAOA layer (Transpiled Depth = 72 at p=1)", ha="center", va="center", fontsize=8.5, color="#555555")
+    ax1.text(4.45, -2.7, "Optimal COBYLA Angles (p=1): gamma = 0.6092,  beta = 2.6096", ha="center", va="center", fontsize=8.5, fontweight="bold", color="#185fa5")
+
+    ax1.set_xlim(-2.2, 9.2)
+    ax1.set_ylim(-3.5, num_qubits + 0.8)
+    ax1.axis("off")
+
+    # --- PANEL 2: QUBO Interaction Graph ---
+    ax2 = fig.add_subplot(gs[1])
+    ax2.set_title("(b) 12-Qubit QUBO Interaction Topology (50 ZZ Terms)", fontsize=13, fontweight="bold", pad=12)
+
+    angles = np.linspace(0, 2 * np.pi, num_qubits, endpoint=False)
+    radius = 3.2
+    pos = {i: np.array([radius * np.cos(angles[i] + np.pi / 2), radius * np.sin(angles[i] + np.pi / 2)]) for i in range(num_qubits)}
+
+    intra_ev_count = 0
+    inter_ev_count = 0
+    for u, v, w in zz_edges:
+        eu = variables[u][0]
+        ev = variables[v][0]
+        if eu == ev:
+            color = "#d62728"
+            lw = 1.4
+            alpha = 0.75
+            intra_ev_count += 1
+        else:
+            color = "#1f77b4"
+            lw = 0.8
+            alpha = 0.35
+            inter_ev_count += 1
+        ax2.plot([pos[u][0], pos[v][0]], [pos[u][1], pos[v][1]], color=color, linewidth=lw, alpha=alpha, zorder=1)
+
+    for i in range(num_qubits):
+        eu, s, t = variables[i]
+        color = wire_colors[i]
+        circle = plt.Circle(pos[i], 0.38, facecolor=color, edgecolor="black", linewidth=1.2, zorder=3)
+        ax2.add_patch(circle)
+        ax2.text(pos[i][0], pos[i][1], f"q{i}", ha="center", va="center", color="white", fontsize=8.5, fontweight="bold", zorder=4)
+        out_pos = pos[i] * 1.22
+        ax2.text(out_pos[0], out_pos[1], f"S{s}@{t}", ha="center", va="center", color="#333333", fontsize=7.5, fontweight="bold", zorder=4)
+
+    intra_line = mlines.Line2D([], [], color="#d62728", linewidth=2, label=f"Same-EV (E3 Assignment): {intra_ev_count} edges")
+    inter_line = mlines.Line2D([], [], color="#1f77b4", linewidth=1.5, alpha=0.6, label=f"Inter-EV (E4 Overlap + Peak): {inter_ev_count} edges")
+    ev0_patch = patches.Patch(color="#1f77b4", label="EV0 variables (q0-q3)")
+    ev1_patch = patches.Patch(color="#2ca02c", label="EV1 variables (q4-q7)")
+    ev2_patch = patches.Patch(color="#ff7f0e", label="EV2 variables (q8-q11)")
+
+    ax2.legend(handles=[ev0_patch, ev1_patch, ev2_patch, intra_line, inter_line], loc="lower center", bbox_to_anchor=(0.5, -0.16), framealpha=0.9, fontsize=8.5, ncol=2)
+
+    ax2.set_xlim(-4.6, 4.6)
+    ax2.set_ylim(-4.6, 4.6)
+    ax2.set_aspect("equal")
+    ax2.axis("off")
+
+    fig.savefig(out_circuit_path, bbox_inches="tight", dpi=200)
     plt.close(fig)
     print(f"Saved {out_circuit_path}")
 
@@ -439,6 +540,7 @@ def generate_circuit_and_transpilation_report(
         noise_model.add_all_qubit_quantum_error(depolarizing_error(0.001, 1), ["rz", "sx", "x"])
         noise_model.add_all_qubit_quantum_error(depolarizing_error(0.01, 2), ["cx"])
 
+        ansatz_p1 = QAOAAnsatz(cost_operator=H_C, reps=1)
         bound_circ = ansatz_p1.assign_parameters(opt_params)
         bound_circ.measure_all()
         t_bound = transpile(bound_circ, basis_gates=basis, optimization_level=2)

@@ -1,1 +1,42 @@
-window.CIRCUIT_TRANSPILATION = {"noisy_simulation": {"P_feasible_noisy": 0.0028076171875, "P_optimal_noisy": 0.000244140625, "feasible_counts": 23, "noise_model": "depolarizing (0.1% 1-qubit, 1.0% 2-qubit)", "optimal_counts": 2, "shots": 8192}, "transpiled_depth_and_gates": {"p_1": {"cx_count": 100, "depth": 72, "ops": {"cx": 100, "rz": 121, "sx": 36}, "total_ops": 257}, "p_2": {"cx_count": 200, "depth": 114, "ops": {"cx": 200, "rz": 218, "sx": 60}, "total_ops": 478}, "p_3": {"cx_count": 300, "depth": 156, "ops": {"cx": 300, "rz": 315, "sx": 84}, "total_ops": 699}}};
+window.CIRCUIT_TRANSPILATION = {
+  "noisy_simulation": {
+    "P_feasible_noisy": 0.0028076171875,
+    "P_optimal_noisy": 0.000244140625,
+    "feasible_counts": 23,
+    "noise_model": "depolarizing (0.1% 1-qubit, 1.0% 2-qubit)",
+    "optimal_counts": 2,
+    "shots": 8192
+  },
+  "transpiled_depth_and_gates": {
+    "p_1": {
+      "cx_count": 100,
+      "depth": 72,
+      "ops": {
+        "cx": 100,
+        "rz": 121,
+        "sx": 36
+      },
+      "total_ops": 257
+    },
+    "p_2": {
+      "cx_count": 200,
+      "depth": 114,
+      "ops": {
+        "cx": 200,
+        "rz": 218,
+        "sx": 60
+      },
+      "total_ops": 478
+    },
+    "p_3": {
+      "cx_count": 300,
+      "depth": 156,
+      "ops": {
+        "cx": 300,
+        "rz": 315,
+        "sx": 84
+      },
+      "total_ops": 699
+    }
+  }
+};
