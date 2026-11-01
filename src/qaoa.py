@@ -384,11 +384,13 @@ def save_results(
 def save_depth_sweep_results(
     results: Dict[str, Any],
     json_path: Path = Path("results/qaoa_depth_sweep.json"),
+    js_path: Path = Path("results/qaoa_depth_sweep.js"),
 ) -> None:
-    """Save depth sweep results to JSON."""
+    """Save depth sweep results to JSON and JS."""
     payload = json.dumps(results, indent=2, sort_keys=True)
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(payload + "\n", encoding="utf-8")
+    js_path.write_text(f"window.QAOA_DEPTH_SWEEP = {payload};\n", encoding="utf-8")
 
 
 def save_lambda_sweep_results(

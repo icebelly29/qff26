@@ -467,7 +467,9 @@ def generate_circuit_and_transpilation_report(
     }
 
     out_json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"Saved {out_json_path}")
+    js_path = out_json_path.with_suffix(".js")
+    js_path.write_text(f"window.CIRCUIT_TRANSPILATION = {json.dumps(report, indent=2, sort_keys=True)};\n", encoding="utf-8")
+    print(f"Saved {out_json_path} and {js_path}")
     return report
 
 

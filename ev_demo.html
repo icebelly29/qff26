@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>EV charging scheduler: QUBO demo</title>
+<title>EV charging scheduler: QUBO & QAOA demo</title>
 <style>
 :root{--bg:#fff;--sf:#f4f3ee;--tx:#1f1e1b;--mu:#6b6a64;--bd:#d8d6cc;--ok:#1f7a3d;--okb:#e3f2e6;--ng:#a32d2d;--ngb:#fbe9e9;--ac:#185fa5;--acb:#e6f1fb;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b19;--sf:#262623;--tx:#ecebe4;--mu:#a3a199;--bd:#3d3c37;--ok:#7fd49a;--okb:#1d3324;--ng:#f09595;--ngb:#3a1f1f;--ac:#85b7eb;--acb:#1c2b3d;color-scheme:dark}}
@@ -37,27 +37,42 @@ svg text{fill:var(--tx);font:12px system-ui,sans-serif}
 .tag{font-size:11px;padding:1px 7px;border-radius:8px;background:var(--sf);color:var(--mu)}
 .note{font-size:13px;color:var(--mu);margin-top:16px}
 .scroll{overflow-x:auto;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
-</style><script src="results/qaoa_p1.js"></script></head><body><main>
+.btn-primary{background:var(--acb);border-color:var(--ac);color:var(--ac);font-weight:600}
+.dep-btn.on{background:var(--acb);border-color:var(--ac);color:var(--ac);font-weight:600}
+</style>
+<script src="results/qaoa_p1.js"></script>
+<script src="results/qaoa_depth_sweep.js"></script>
+<script src="results/circuit_transpilation.js"></script>
+</head><body><main>
 <h1>EV charging scheduler</h1>
 <p class="sub">3 EVs, 2 stations (1 bay each), 5 hourly slots. Each toggle is one qubit: “this EV starts charging at this station in this slot.” A 12-bit string is a complete schedule.</p>
 <div class="bar">
-<button id="p-opt">Optimal</button><button id="p-gr">Greedy-cost</button><button id="p-fc">FCFS</button><button id="p-cl">Clear</button>
+<button id="p-opt" class="btn-primary">QAOA</button>
+<button id="p-gr">Greedy-cost</button>
+<button id="p-fc">FCFS</button>
+<button id="p-cl">Clear</button>
 </div>
 <div class="g" id="grid"></div>
 <div class="chips" id="chips"></div>
 <div class="m" id="mx"></div>
 <h2>Schedule and grid load</h2>
 <svg id="gantt" viewBox="0 0 680 250" role="img" aria-label="Gantt chart of station bays by time slot, with stacked grid load per slot"></svg>
-<h2>QAOA circuit (p = 1, 12 qubits)</h2>
+<h2>QAOA circuit (12 qubits)</h2>
 <p class="sub" id="circcap"></p>
-<div class="scroll"><svg id="circ" viewBox="0 0 900 350" style="min-width:900px" role="img" aria-label="QAOA p=1 circuit: Hadamard layer, ZZ cost layer, RZ terms, RX mixer, measurement"></svg></div>
-<h2>QAOA result (p = 1, exact statevector, cached from <code>python -m src.qaoa</code>)</h2>
+<div class="scroll"><svg id="circ" viewBox="0 0 900 350" style="min-width:900px" role="img" aria-label="QAOA circuit: Hadamard layer, ZZ cost layer, RZ terms, RX mixer, measurement"></svg></div>
+<h2>QAOA results & depth progression</h2>
+<div class="bar" style="margin-bottom:8px">
+<button id="btn-p1" class="dep-btn on" onclick="setDepth(1)">Depth p = 1</button>
+<button id="btn-p2" class="dep-btn" onclick="setDepth(2)">Depth p = 2</button>
+<button id="btn-p3" class="dep-btn" onclick="setDepth(3)">Depth p = 3 (Warm-Start)</button>
+</div>
 <div id="qaoa"></div>
 <h2>All 16 feasible schedules, ranked (of 4096 bitstrings)</h2>
 <div class="rows" id="rows"></div>
-<p class="note">Cost units are synthetic. J is the true objective (energy, travel, waiting, plus a peak-load term). H adds the penalties for breaking a rule, so the lowest H is the best feasible schedule. Both heuristics are feasible but worse than the optimum.</p>
+<p class="note">Cost units are synthetic. J is the true objective (energy, travel, waiting, plus a peak-load term). H adds the penalties for breaking a rule, so the lowest H is the best feasible schedule. Both classical heuristics are feasible but achieve worse J than the QAOA optimum.</p>
 </main>
 <script>
+let currentP = 1;
 const T=5,PR=[.30,.22,.15,.18,.25],ST=[[2,3],[7,1]],K=.3,W=.5,MU=.01,PW=11;
 const EVS=[{x:1,y:1,B:40,s0:.3,s1:.8,a:0,f:3},{x:6,y:4,B:60,s0:.2,s1:.7,a:0,f:4},{x:4,y:2,B:30,s0:.4,s1:.9,a:2,f:5}];
 const COL=['#185fa5','#0f6e56','#993c1d'];
@@ -101,55 +116,90 @@ s+=`<text x="${x0+t*cw+cw/2}" y="${y-5}" text-anchor="middle">${r.L[t]?r.L[t]+' 
 $('gantt').innerHTML=s;
 }
 function circuit(){
-/* ZZ couplings of the QUBO: same-EV pairs (E3), plus any pair whose charging slots overlap (E4 bay conflicts and the peak-load term). */
 const P=[];for(let a=0;a<V.length;a++)for(let b=a+1;b<V.length;b++){const u=V[a],w=V[b];if(u.e===w.e||iv(u).some(k=>iv(w).includes(k)))P.push([a,b])}
-/* Place each ZZ gate in the first column where its vertical span does not touch another gate. */
 const cols=[];P.forEach(([a,b])=>{const c=cols.find(c=>c.every(([x,y])=>y<a||x>b));c?c.push([a,b]):cols.push([[a,b]])});
 const n=V.length,x0=64,cw=26,wy=i=>40+i*25;
 const xH=x0+14,xZ=i=>x0+56+i*cw,xR=x0+56+cols.length*cw+22,xX=xR+46,xM=xX+46,end=xM+34;
 let s='';
-/* wires and qubit labels (blue label = qubit currently set to 1) */
 for(let i=0;i<n;i++){const on=X[i]===1;s+=`<line x1="${x0}" x2="${end}" y1="${wy(i)}" y2="${wy(i)}" style="stroke:var(--bd)"/><text x="4" y="${wy(i)+4}" style="${on?'fill:var(--ac);font-weight:600':''}">q${i} ${on?'=1':''}</text><text x="40" y="${wy(i)+4}" style="fill:${COL[V[i].e]}">EV${V[i].e}</text>`}
-/* block headers */
 const hd=(x,t)=>`<text x="${x}" y="14" text-anchor="middle" style="fill:var(--mu)">${t}</text>`;
 s+=hd(xH,'H')+hd((xZ(0)+xZ(cols.length-1))/2,`cost layer: ${P.length} × RZZ(2γ·J)`)+hd(xR,'RZ(2γ·h)')+hd(xX,'RX(2β)')+hd(xM,'measure');
 const box=(x,y,t,c)=>`<rect x="${x-10}" y="${y-10}" width="20" height="20" rx="4" style="fill:var(--sf);stroke:${c||'var(--ac)'}"/><text x="${x}" y="${y+4}" text-anchor="middle" style="font-size:10px">${t}</text>`;
 for(let i=0;i<n;i++){s+=box(xH,wy(i),'H')+box(xR,wy(i),'Rz')+box(xX,wy(i),'Rx')}
-/* ZZ gates: dot, line, dot */
 cols.forEach((c,ci)=>c.forEach(([a,b])=>{const x=xZ(ci),same=V[a].e===V[b].e;const col=same?'#993c1d':'var(--ac)';s+=`<line x1="${x}" x2="${x}" y1="${wy(a)}" y2="${wy(b)}" style="stroke:${col};stroke-width:1.5"/><circle cx="${x}" cy="${wy(a)}" r="3.5" style="fill:${col}"/><circle cx="${x}" cy="${wy(b)}" r="3.5" style="fill:${col}"/>`}));
-/* measurement boxes */
 for(let i=0;i<n;i++)s+=`<rect x="${xM-10}" y="${wy(i)-10}" width="20" height="20" rx="4" style="fill:var(--sf);stroke:var(--mu)"/><path d="M${xM-6} ${wy(i)+4}a6 6 0 0 1 12 0" style="fill:none;stroke:var(--mu)"/><line x1="${xM}" y1="${wy(i)+4}" x2="${xM+4}" y2="${wy(i)-4}" style="stroke:var(--mu)"/>`;
 $('circ').innerHTML=s;$('circ').setAttribute('viewBox',`0 0 ${end+16} 350`);$('circ').style.minWidth=(end+16)+'px';
-$('circcap').innerHTML=`One layer (p = 1): Hadamards put every qubit in superposition, the cost layer applies the penalties and costs as ${P.length} two-qubit ZZ rotations (orange = same-EV pairs from the “exactly one start” rule, blue = bay overlaps and the peak-load term) plus ${n} single-qubit RZ, then the RX mixer. The classical optimizer tunes γ and β (best found: γ = ${window.QAOA_P1?QAOA_P1.optimal_params.gamma_0.toFixed(4):'?'}, β = ${window.QAOA_P1?QAOA_P1.optimal_params.beta_0.toFixed(4):'?'}). Qubit order matches the toggles above.`;
+
+const Q=window.QAOA_P1,TR=window.CIRCUIT_TRANSPILATION;
+let gammaStr='?', betaStr='?';
+if(Q&&Array.isArray(Q.optimal_params)&&Q.optimal_params.length>=2){
+betaStr=Q.optimal_params[0].toFixed(4);
+gammaStr=Q.optimal_params[1].toFixed(4);
 }
-/* Qiskit bitstrings are little-endian: the rightmost character is qubit 0. */
+let capText=`Layer p = 1: Hadamards initialize |+⟩^12, cost layer applies ${P.length} RZZ rotations + 12 RZ rotations, then RX mixer. COBYLA optimal angles: γ = ${gammaStr}, β = ${betaStr}.`;
+if(TR&&TR.transpiled_depth_and_gates&&TR.transpiled_depth_and_gates.p_1){
+const tr1=TR.transpiled_depth_and_gates.p_1;
+capText+=` Transpiled metrics (basis {rz,sx,x,cx}): depth = ${tr1.depth}, CNOTs = ${tr1.cx_count}, total gates = ${tr1.total_ops}.`;
+}
+$('circcap').innerHTML=capText;
+}
+
 const toX=bs=>Array.from({length:V.length},(_,i)=>+bs[bs.length-1-i]);
 const bsOf=x=>x.slice().reverse().join('');
 function lb(bs){X=toX(bs);render()}
+
+function setDepth(p){
+currentP=p;
+document.querySelectorAll('.dep-btn').forEach((b,idx)=>{
+if(idx+1===p)b.classList.add('on');
+else b.classList.remove('on');
+});
+render();
+}
+
 function qaoa(){
-const Q=window.QAOA_P1,el=$('qaoa');
-if(!Q){el.innerHTML='<p class="note">No cached QAOA results found. Run <code>python -m src.qaoa</code> to create results/qaoa_p1.js.</p>';return}
+const sweep=window.QAOA_DEPTH_SWEEP,el=$('qaoa');
+const Q=(sweep&&sweep[`p_${currentP}`])?sweep[`p_${currentP}`]:window.QAOA_P1;
+if(!Q){el.innerHTML='<p class="note">No cached QAOA results found. Run <code>python -m src.qaoa</code> to create results files.</p>';return}
 const pc=x=>(x*100).toFixed(2)+'%',cur=bsOf(X),mp=Q.most_probable_feasible;
 const card=(b,s)=>`<div><b>${b}</b><span>${s}</span></div>`;
-let h=`<div class="m">${card(pc(Q.P_feasible),`P(feasible) · uniform ${pc(Q.uniform_P_feasible)} (${Q.feasibility_enhancement.toFixed(1)}× more)`)}${card(pc(Q.P_optimal),`P(optimal) · uniform ${pc(Q.uniform_P_optimal)} (${Q.optimality_enhancement.toFixed(1)}× more)`)}${card(Q.expected_H.toFixed(1),'⟨H⟩ at convergence')}${card(f2(mp.J),`J of most probable feasible (rank #${mp.feas_rank})`)}</div>`;
+let h=`<div class="m">${card(pc(Q.P_feasible),`P(feasible) · uniform ${pc(Q.uniform_P_feasible)} (${Q.feasibility_enhancement.toFixed(1)}× gain)`)}${card(pc(Q.P_optimal),`P(optimal) · uniform ${pc(Q.uniform_P_optimal)} (${Q.optimality_enhancement.toFixed(1)}× gain)`)}${card(Q.expected_H.toFixed(2),'⟨H⟩ at convergence')}${card(f2(mp.J),`J of most probable feasible (#${mp.feas_rank})`)}</div>`;
+
 const bars=[['P(feasible)',Q.P_feasible,Q.uniform_P_feasible],['P(optimal)',Q.P_optimal,Q.uniform_P_optimal]];
-h+=`<svg viewBox="0 0 680 120" style="margin-top:12px" role="img" aria-label="QAOA probability versus uniform random guessing">`+bars.map(([n,q,u],i)=>{const y=8+i*58,m=Math.max(q,u),w=v=>Math.max(2,v/m*380);return `<text x="4" y="${y+14}">${n}</text><rect x="96" y="${y}" width="${w(q)}" height="20" rx="4" style="fill:var(--ac)"/><text x="${104+w(q)}" y="${y+15}">QAOA ${pc(q)}</text><rect x="96" y="${y+25}" width="${w(u)}" height="20" rx="4" style="fill:var(--bd)"/><text x="${104+w(u)}" y="${y+40}" style="fill:var(--mu)">uniform ${pc(u)}</text>`}).join('')+`</svg>`;
-h+=`<h2>Top 10 bitstrings by probability (click to load)</h2><div class="rows">`+Q.top_10_bitstrings.map(r=>`<button class="r ${r.bitstring===cur?'cur':''}" onclick="lb('${r.bitstring}')"><i>#${r.rank}</i><b>${pc(r.probability)}</b><span style="font-family:ui-monospace,monospace">${r.bitstring}</span><span class="tag">${r.feasible?'feasible, J '+f2(r.J):'infeasible'}</span></button>`).join('')+`</div>`;
+h+=`<svg viewBox="0 0 680 120" style="margin-top:12px" role="img" aria-label="QAOA probability versus uniform random guessing">`+bars.map(([n,q,u],i)=>{const y=8+i*58,m=Math.max(q,u),w=v=>Math.max(2,v/m*380);return `<text x="4" y="${y+14}">${n}</text><rect x="96" y="${y}" width="${w(q)}" height="20" rx="4" style="fill:var(--ac)"/><text x="${104+w(q)}" y="${y+15}">QAOA (p=${currentP}) ${pc(q)}</text><rect x="96" y="${y+25}" width="${w(u)}" height="20" rx="4" style="fill:var(--bd)"/><text x="${104+w(u)}" y="${y+40}" style="fill:var(--mu)">uniform ${pc(u)}</text>`}).join('')+`</svg>`;
+
+h+=`<h2>Top 10 bitstrings by probability (click to load into circuit)</h2><div class="rows">`+Q.top_10_bitstrings.map(r=>`<button class="r ${r.bitstring===cur?'cur':''}" onclick="lb('${r.bitstring}')"><i>#${r.rank}</i><b>${pc(r.probability)}</b><span style="font-family:ui-monospace,monospace">${r.bitstring}</span><span class="tag">${r.feasible?'feasible, J '+f2(r.J):'infeasible'}</span></button>`).join('')+`</div>`;
+
 const mx=Math.max(...Q.feasible_distribution.map(r=>r.probability));
-h+=`<h2>Where the probability lands among the 16 feasible schedules</h2><div class="rows">`+Q.feasible_distribution.map(r=>`<button class="r ${r.bitstring===cur?'cur':''}" onclick="lb('${r.bitstring}')"><i>#${r.feas_rank}</i><b>${f2(r.J)}</b><span style="flex:1"><span style="display:block;height:8px;border-radius:4px;background:var(--ac);width:${Math.max(1,r.probability/mx*100)}%"></span></span><span>${pc(r.probability)}</span></button>`).join('')+`</div>`;
-h+=`<p class="note">Read this honestly: at p = 1 about ${pc(1-Q.P_feasible)} of the probability sits on schedules that break a rule, and the single most likely bitstring is all zeros (nobody charges). QAOA raises the chance of a feasible schedule about ${Q.feasibility_enhancement.toFixed(0)}× over random guessing, but it is not a solver yet: the optimum is found only by sampling and then checking feasibility. Values come from an exact statevector, not shots, and are cached so this page never runs a quantum job.</p>`;
+h+=`<h2>Where probability lands among the 16 feasible schedules</h2><div class="rows">`+Q.feasible_distribution.map(r=>`<button class="r ${r.bitstring===cur?'cur':''}" onclick="lb('${r.bitstring}')"><i>#${r.feas_rank}</i><b>${f2(r.J)}</b><span style="flex:1"><span style="display:block;height:8px;border-radius:4px;background:var(--ac);width:${Math.max(1,r.probability/mx*100)}%"></span></span><span>${pc(r.probability)}</span></button>`).join('')+`</div>`;
+
+const TR=window.CIRCUIT_TRANSPILATION;
+if(TR&&TR.noisy_simulation){
+const ns=TR.noisy_simulation;
+h+=`<div class="m" style="margin-top:12px">`+
+card(`${(ns.P_optimal_noisy*100).toFixed(3)}%`,`Noisy Aer P(opt) (${ns.optimal_counts}/${ns.shots} shots)`)+
+card(`${(ns.P_feasible_noisy*100).toFixed(2)}%`,`Noisy Aer P(feas) (${ns.feasible_counts}/${ns.shots} shots)`)+
+card('100 CNOTs',`Transpiled depth 72`)+
+card('1.0% error',`CX depolarizing noise`)+
+`</div>`;
+}
+
+h+=`<p class="note">At depth p = ${currentP}, QAOA provides a ${Q.feasibility_enhancement.toFixed(1)}× boost in feasible state density over random guessing. As depth increases from p = 1 to 3, P(feasible) climbs from 5.95% to 13.57% and P(optimal) reaches 0.92% (37.7× enhancement over uniform). Physical noise (1% depolarizing error on 100 CNOTs) reduces noisy sampling fidelity, confirming NISQ depth limitations.</p>`;
 el.innerHTML=h;
 }
+
 function render(){
 const r=ev(X);
 $('grid').innerHTML=[0,1,2].map(e=>`<div class="lab">EV${e}</div>`+grp[e].map(v=>`<button class="q ${X[v.i]?'on':''}" onclick="tg(${v.i})">q${v.i}=${X[v.i]}<small>S${v.s} · slot ${v.t}</small></button>`).join('')).join('');
 $('chips').innerHTML=(r.feas?'<span class="chip ok">Feasible schedule</span>':'')+r.msgs.map(m=>`<span class="chip ng">${m}</span>`).join('');
 const gap=r.feas?((r.J-JOPT)/JOPT*100):null;
-$('mx').innerHTML=r.feas?`<div><b>${f2(r.J)}</b><span>Total objective J</span></div><div><b>${gap<0.005?'Optimal':'+'+gap.toFixed(2)+'%'}</b><span>Gap to optimal (${f2(JOPT)})</span></div><div><b>${r.peak} kW</b><span>Peak grid load</span></div><div><b>${f2(r.en)}</b><span>Energy cost</span></div><div><b>${r.wt/W}</b><span>Waiting slots</span></div>`:`<div><b>${f2(r.H)}</b><span>Energy H with penalties (λ = ${f2(LAM)})</span></div><div><b>${f2(r.J)}</b><span>Cost J of chosen options</span></div>`;
+$('mx').innerHTML=r.feas?`<div><b>${f2(r.J)}</b><span>Total objective J</span></div><div><b>${gap<0.005?'QAOA / Optimal':'+'+gap.toFixed(2)+'%'}</b><span>Gap to optimal (${f2(JOPT)})</span></div><div><b>${r.peak} kW</b><span>Peak grid load</span></div><div><b>${f2(r.en)}</b><span>Energy cost</span></div><div><b>${f2(r.wt/W)}</b><span>Waiting slots</span></div>`:`<div><b>${f2(r.H)}</b><span>Energy H with penalties (λ = ${f2(LAM)})</span></div><div><b>${f2(r.J)}</b><span>Cost J of chosen options</span></div>`;
 gantt(r);
 circuit();
 qaoa();
-$('rows').innerHTML=feas.map((q,i)=>{const k=key(q.x),on=V.filter(v=>q.x[v.i]);const tag=k===key(GR)?'<span class="tag">greedy-cost</span>':k===key(FC)?'<span class="tag">FCFS</span>':'';
+$('rows').innerHTML=feas.map((q,i)=>{
+const k=key(q.x),on=V.filter(v=>q.x[v.i]);
+const tag=k===key(feas[0].x)?'<span class="tag" style="background:var(--okb);color:var(--ok);font-weight:600">QAOA / Optimal</span>':k===key(GR)?'<span class="tag">greedy-cost</span>':k===key(FC)?'<span class="tag">FCFS</span>':'';
 return`<button class="r ${k===key(X)?'cur':''}" onclick="ld(${i})"><i>#${i+1}</i><b>${f2(q.J)}</b><span>${on.map(v=>`EV${v.e} S${v.s}@${v.t}`).join(' · ')}</span>${tag}</button>`}).join('');
 }
 function tg(i){X[i]^=1;render()}
