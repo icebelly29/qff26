@@ -1,0 +1,66 @@
+{
+  "num_slots": 4,
+  "delta_hours": 1.0,
+  "prices": [
+    0.3,
+    0.22,
+    0.15,
+    0.25
+  ],
+  "stations": [
+    {
+      "id": 0,
+      "name": "S0",
+      "x": 2.0,
+      "y": 3.0,
+      "bays": 1,
+      "power_kw": 11.0
+    },
+    {
+      "id": 1,
+      "name": "S1",
+      "x": 7.0,
+      "y": 1.0,
+      "bays": 1,
+      "power_kw": 11.0
+    }
+  ],
+  "evs": [
+    {
+      "id": 0,
+      "name": "EV0",
+      "x": 1.0,
+      "y": 1.0,
+      "battery_kwh": 40.0,
+      "soc_now": 0.3,
+      "soc_target": 0.8,
+      "arrival_slot": 0,
+      "deadline_slot": 3
+    },
+    {
+      "id": 1,
+      "name": "EV1",
+      "x": 6.0,
+      "y": 4.0,
+      "battery_kwh": 60.0,
+      "soc_now": 0.2,
+      "soc_target": 0.7,
+      "arrival_slot": 0,
+      "deadline_slot": 4
+    },
+    {
+      "id": 2,
+      "name": "EV2",
+      "x": 4.0,
+      "y": 2.0,
+      "battery_kwh": 30.0,
+      "soc_now": 0.4,
+      "soc_target": 0.9,
+      "arrival_slot": 1,
+      "deadline_slot": 4
+    }
+  ],
+  "kappa": 0.3,
+  "omega": 0.5,
+  "mu": 0.01
+}
