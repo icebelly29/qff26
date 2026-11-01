@@ -47,7 +47,7 @@ svg text{fill:var(--tx);font:12px system-ui,sans-serif}
 <script src="results/circuit_transpilation.js"></script>
 </head><body><main>
 <h1>EV charging scheduler</h1>
-<p class="sub">3 EVs, 2 stations (1 bay each), 5 hourly slots. Each toggle is one qubit: “this EV starts charging at this station in this slot.” A 14-bit string is a complete schedule.</p>
+<p class="sub">3 EVs, 2 stations (1 bay each), 5 hourly slots. Each toggle is one qubit: “this EV starts charging at this station in this slot.” A 12-bit string is a complete schedule.</p>
 <div class="bar">
 <button id="p-opt" class="btn-primary">QAOA</button>
 <button id="p-gr">Greedy-cost</button>
@@ -59,7 +59,7 @@ svg text{fill:var(--tx);font:12px system-ui,sans-serif}
 <div class="m" id="mx"></div>
 <h2>Schedule and grid load</h2>
 <svg id="gantt" viewBox="0 0 680 250" role="img" aria-label="Gantt chart of station bays by time slot, with stacked grid load per slot"></svg>
-<h2>QAOA circuit (14 qubits)</h2>
+<h2>QAOA circuit (12 qubits)</h2>
 <p class="sub" id="circcap"></p>
 <div class="scroll"><svg id="circ" viewBox="0 0 900 350" style="min-width:900px" role="img" aria-label="QAOA circuit: Hadamard layer, ZZ cost layer, RZ terms, RX mixer, measurement"></svg></div>
 <h2>QAOA results & depth progression</h2>
@@ -69,14 +69,14 @@ svg text{fill:var(--tx);font:12px system-ui,sans-serif}
 <button id="btn-p3" class="dep-btn" onclick="setDepth(3)">Depth p = 3 (Warm-Start)</button>
 </div>
 <div id="qaoa"></div>
-<h2>All 18 feasible schedules, ranked (of 16,384 bitstrings)</h2>
+<h2>All 16 feasible schedules, ranked (of 4096 bitstrings)</h2>
 <div class="rows" id="rows"></div>
 <p class="note">Cost units are synthetic. J is the true objective (energy, travel, waiting, plus a peak-load term). H adds the penalties for breaking a rule, so the lowest H is the best feasible schedule. Both classical heuristics are feasible but achieve worse J than the QAOA optimum.</p>
 </main>
 <script>
 let currentP = 1;
 const T=5,PR=[.30,.22,.15,.18,.25],ST=[[2,3],[7,1]],K=.3,W=.5,MU=.01,PW=11;
-const EVS=[{x:1,y:1,B:40,s0:.3,s1:.8,a:0,f:4},{x:6,y:4,B:60,s0:.2,s1:.7,a:0,f:4},{x:4,y:2,B:30,s0:.4,s1:.9,a:2,f:5}];
+const EVS=[{x:1,y:1,B:40,s0:.3,s1:.8,a:0,f:3},{x:6,y:4,B:60,s0:.2,s1:.7,a:0,f:4},{x:4,y:2,B:30,s0:.4,s1:.9,a:2,f:5}];
 const COL=['#185fa5','#0f6e56','#993c1d'];
 EVS.forEach(e=>{e.E=Math.round(e.B*(e.s1-e.s0)*1e6)/1e6;e.d=Math.ceil(e.E/PW-1e-9);e.p=e.E/e.d});
 const V=[];
@@ -103,7 +103,7 @@ for(const a of grp[0])for(const b of grp[1])for(const c of grp[2]){const x=Array
 feas.sort((a,b)=>a.J-b.J);
 const JOPT=feas[0].J;
 const mk=l=>{const x=Array(V.length).fill(0);l.forEach(([e,s,t])=>{const v=V.find(v=>v.e===e&&v.s===s&&v.t===t);x[v.i]=1});return x};
-const GR=mk([[0,0,0],[1,1,1],[2,0,2]]),FC=mk([[0,0,0],[1,1,0],[2,0,2]]);
+const GR=mk([[0,0,1],[1,1,1],[2,0,3]]),FC=mk([[0,0,0],[1,1,0],[2,0,2]]);
 let X=feas[0].x.slice();
 const $=id=>document.getElementById(id);
 function gantt(r){

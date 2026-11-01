@@ -26,7 +26,7 @@ Pipeline:
 instance → prune → QUBO → verify vs brute force → QAOA → evaluate vs baselines → plots → README
 ```
 
-**Quantum component:** QAOA on the QUBO's Ising Hamiltonian, implemented with Qiskit, simulated exactly with statevector (14 qubits), plus one noisy Aer run for NISQ awareness.
+**Quantum component:** QAOA on the QUBO's Ising Hamiltonian, implemented with Qiskit, simulated exactly with statevector (12 qubits), plus one noisy Aer run for NISQ awareness.
 
 **Not required:** quantum advantage. Honest comparison against classical baselines is the goal.
 
@@ -63,7 +63,7 @@ Electricity price per kWh by slot: π = [0.30, 0.22, 0.15, 0.18, 0.25].
 
 | EV | x | y | Battery B (kWh) | SoC now | SoC target | Arrival a_e (slot) | Deadline f_e (finish by end of slot f_e − 1) |
 |---|---|---|---|---|---|---|---|
-| EV0 | 1 | 1 | 40 | 0.30 | 0.80 | 0 | 4 |
+| EV0 | 1 | 1 | 40 | 0.30 | 0.80 | 0 | 3 |
 | EV1 | 6 | 4 | 60 | 0.20 | 0.70 | 0 | 4 |
 | EV2 | 4 | 2 | 30 | 0.40 | 0.90 | 2 | 5 |
 
@@ -90,7 +90,7 @@ A variable chooses the **start slot**. The charging duration is then fixed by `d
 ### 3.3 Pruning (classical preprocessing)
 Keep `v = (e, s, t)` only if `a_e ≤ t` and `t + d_e ≤ f_e`. Pruning removes variables that can never be feasible, which saves qubits.
 
-Expected for the fixed instance: EV0 starts ∈ {0,1,2}, EV1 starts ∈ {0,1,2}, EV2 starts ∈ {2,3}, each with 2 stations. **n = 14 qubits.** Hard limit: n ≤ 14.
+Expected for the fixed instance: EV0 starts ∈ {0,1}, EV1 starts ∈ {0,1}, EV2 starts ∈ {2,3}, each with 2 stations. **n = 12 qubits.** Hard limit: n ≤ 14.
 
 Variable index `i` = position in the list sorted lexicographically by `(e, s, t)`. Qubit `i` ↔ variable `i`.
 
@@ -159,7 +159,7 @@ Substitute `x_i = (1 − Z_i)/2` (this is what `QuadraticProgram.to_ising()` doe
 
 All solutions are scored with the same `evaluate.py` functions (§7).
 
-1. **Brute force (ground truth).** Enumerate all `2^n` bitstrings (16384 for n = 14). Return the minimum of `H` and the best feasible `J`. Report whether the ground state is unique.
+1. **Brute force (ground truth).** Enumerate all `2^n` bitstrings (4096 for n = 12). Return the minimum of `H` and the best feasible `J`. Report whether the ground state is unique.
 2. **FCFS.** Order EVs by arrival then index. Each takes the earliest feasible `(t)` on the lowest-index station with no bay conflict.
 3. **Greedy-cost.** Order EVs by deadline slack. Each takes the conflict-free `v` with the smallest `c_v`. This ignores the peak term, which is the point of the comparison.
 4. *(Nice to have)* **ILP with PuLP/CBC.** Same variables and hard constraints (E3, E4 as linear constraints); objective = `Σ c_v x_v + μ' · L_max` with `L_max` an auxiliary variable linearizing the maximum load. Score its schedule with `J`. State clearly that it optimizes a slightly different peak proxy.
@@ -246,7 +246,7 @@ Run `pytest` at every gate. Failures block the next stage.
 
 | Test | Passes when |
 |---|---|
-| `test_instance` | Derived values match §3.1 (`E, d, p`) and pruned `n = 14` |
+| `test_instance` | Derived values match §3.1 (`E, d, p`) and pruned `n = 12` |
 | `test_matrix_equals_formula` | `const + Σ Q_uu x_u + Σ Q_uv x_u x_v` equals the direct formula for `H(x)` (§4.4) on 1000 random bitstrings (tolerance 1e-9) |
 | `test_ising_equals_qubo` | The diagonal of the `to_ising()` operator plus offset equals `H(x)` for all `2^n` bitstrings |
 | `test_bit_order` | A known bitstring decodes to the expected `(e,s,t)` assignments after Qiskit's little-endian reversal |
@@ -269,7 +269,7 @@ QAOA-stage gate: `P(optimal)` should not decrease as `p` increases (allowing sma
 6. Top-10 bitstring probability histogram, colored by feasibility.
 7. QAOA circuit diagram at `p = 1`, plus transpiled depth table.
 
-**README must contain:** problem and track; pipeline diagram; the full derivation from §4 including the λ argument; circuit diagram; convergence and comparison plots; the metrics table; honest limitations (NISQ depth, qubit scaling, QAOA not beating classical at n = 14); `requirements.txt` and run instructions (`python -m src.run_all`); a statement that the data is synthetic; acknowledgment of any borrowed ideas or third-party code.
+**README must contain:** problem and track; pipeline diagram; the full derivation from §4 including the λ argument; circuit diagram; convergence and comparison plots; the metrics table; honest limitations (NISQ depth, qubit scaling, QAOA not beating classical at n = 12); `requirements.txt` and run instructions (`python -m src.run_all`); a statement that the data is synthetic; acknowledgment of any borrowed ideas or third-party code.
 
 ---
 

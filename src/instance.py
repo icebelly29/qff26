@@ -146,7 +146,7 @@ def get_fixed_instance() -> ProblemInstance:
             soc_now=0.30,
             soc_target=0.80,
             arrival_slot=0,
-            deadline_slot=4,
+            deadline_slot=3,
         ),
         EV(
             id=1,

@@ -34,10 +34,10 @@ flowchart LR
 ```
 
 The pipeline enforces reproducible, gate-driven execution:
-- **Pruning**: Reduces variable space to **14 qubits** ($n \le 14$ hard budget).
+- **Pruning**: Reduces variable space to **12 qubits** ($n \le 14$ hard budget).
 - **Analytical Bound ($\Lambda$)**: Computes minimum penalty $\lambda = 1.1\Lambda$ so constraints are never violated at optimum.
 - **V2 Primitives**: Exact statevector expectation with `StatevectorEstimator` and `QAOAAnsatz`.
-- **Classical Baselines**: Ground truth brute force (16,384 states), First-Come First-Served (FCFS), and Greedy-Cost.
+- **Classical Baselines**: Ground truth brute force (4,096 states), First-Come First-Served (FCFS), and Greedy-Cost.
 
 ---
 
@@ -78,7 +78,7 @@ Setting $\lambda_A = \lambda_O = 1.1 \cdot \Lambda = 23.580625$ guarantees that 
 ### 3.5 Ising Mapping
 Substituting $x_i = \frac{1 - Z_i}{2}$ yields the diagonal Hamiltonian:
 $$H_C = \sum_i h_i Z_i + \sum_{i < j} J_{ij} Z_i Z_j + \text{offset}$$
-For $n = 14$ variables, the operator contains 14 single-qubit $Z$ terms and 75 two-qubit $ZZ$ interaction terms.
+For $n = 12$ variables, the operator contains 12 single-qubit $Z$ terms and 50 two-qubit $ZZ$ interaction terms.
 
 ---
 
@@ -89,16 +89,16 @@ $$|\psi(\vec{\gamma}, \vec{\beta})\rangle = \prod_{l=1}^p e^{-i \beta_l \sum_i X
 
 ![QAOA Circuit Diagram](results/qaoa_circuit.png)
 
-### Transpiled Gate Complexity & Depth Analysis ($n = 14$ Qubits)
+### Transpiled Gate Complexity & Depth Analysis ($n = 12$ Qubits)
 Target basis: `{rz, sx, x, cx}`.
 
 | Circuit Depth | Transpiled Depth | CNOT ($CX$) Count | Single-Qubit Gates | Total Operations |
 |:---:|:---:|:---:|:---:|:---:|
-| **$p = 1$** | 84 | 150 | 200 | 350 |
-| **$p = 2$** | 132 | 300 | 358 | 658 |
-| **$p = 3$** | 180 | 450 | 516 | 966 |
+| **$p = 1$** | 72 | 100 | 157 | 257 |
+| **$p = 2$** | 114 | 200 | 278 | 478 |
+| **$p = 3$** | 156 | 300 | 399 | 699 |
 
-*Note:* Each of the 75 $ZZ$ Pauli interaction terms decomposes into 2 CNOT gates and 1 $R_Z$ rotation ($75 \times 2 = 150$ CNOTs per layer).
+*Note:* Each of the 50 $ZZ$ Pauli interaction terms decomposes into 2 CNOT gates and 1 $R_Z$ rotation ($50 \times 2 = 100$ CNOTs per layer).
 
 ---
 
@@ -109,11 +109,11 @@ Target basis: `{rz, sx, x, cx}`.
 | Method | Feasible | $J$ (\$) | Gap to Opt (%) | Energy Cost (\$) | Travel Cost (\$) | Wait Cost (\$) | Total Wait (slots) | Max Wait (slots) | Peak Load (kW) | Load Var | Avg Bay Util | Runtime (s) | $P(\text{opt})$ (%) | $P(\text{feas})$ (%) |
 |:---|:---|---:|:---|---:|---:|---:|---:|---:|---:|---:|:---|---:|:---|:---|
 | **Brute Force** | True | **26.8403** | **0.00%** | 13.9250 | 2.2903 | 1.0000 | 2 | 1 | 20.0 | 23.5 | 70.0% | 0.050 | - | - |
-| **Greedy-cost** | True | 27.0903 | +0.93% | 13.1750 | 2.2903 | 0.5000 | 1 | 1 | 20.0 | 53.5 | 70.0% | 0.001 | - | - |
+| **Greedy-cost** | True | 27.8403 | +3.73% | 12.4250 | 2.2903 | 1.5000 | 3 | 1 | 20.0 | 63.5 | 70.0% | 0.001 | - | - |
 | **FCFS** | True | 28.2903 | +5.40% | 14.3750 | 2.2903 | 0.0000 | 0 | 0 | 20.0 | 63.5 | 70.0% | 0.001 | - | - |
-| **QAOA ($p=1$)** | True | 28.3182 | +5.51% | 15.1250 | 2.5682 | 0.5000 | 1 | 1 | 20.0 | 33.5 | 70.0% | 12.0 | 0.2300% | 3.89% |
-| **QAOA ($p=2$)** | True | 28.0578 | +4.54% | 13.2250 | 3.7078 | 1.5000 | 3 | 2 | 20.0 | 23.5 | 70.0% | 35.0 | 0.1268% | 2.21% |
-| **QAOA ($p=3$)** | True | 28.3182 | +5.51% | 15.1250 | 2.5682 | 0.5000 | 1 | 1 | 20.0 | 33.5 | 70.0% | 75.0 | **0.4818%** | **7.96%** |
+| **QAOA ($p=1$)** | True | **26.8403** | **0.00%** | 13.9250 | 2.2903 | 1.0000 | 2 | 1 | 20.0 | 23.5 | 70.0% | 12.0 | 0.4015% | 5.95% |
+| **QAOA ($p=2$)** | True | 27.0903 | +0.93% | 13.1750 | 2.2903 | 0.5000 | 1 | 1 | 20.0 | 53.5 | 70.0% | 35.0 | 0.3578% | 5.67% |
+| **QAOA ($p=3$)** | True | 28.3182 | +5.51% | 15.1250 | 2.5682 | 0.5000 | 1 | 1 | 20.0 | 33.5 | 70.0% | 75.0 | **0.9189%** | **13.57%** |
 
 ---
 
@@ -127,7 +127,7 @@ Comparing station occupancies across time slots:
 Comparing slot-by-slot grid charging load:
 ![Grid Load](results/grid_load.png)
 
-*Key Finding:* FCFS and Greedy create load spikes with high variance ($63.5$ and $53.5$), while the Brute Force and QAOA schedules smooth charging demand across bays (variance $23.5$ and $33.5$).
+*Key Finding:* FCFS and Greedy create load spikes with high variance ($63.5$), while the Brute Force and QAOA ($p=1$) schedules smooth charging demand across bays (variance $23.5$).
 
 ---
 
@@ -137,16 +137,16 @@ Comparing slot-by-slot grid charging load:
 ![QAOA Convergence](results/qaoa_convergence.png)
 
 - Expected energy decreases steadily across depths:
-  - $p=1$: $\langle H \rangle = 71.3016$
-  - $p=2$: $\langle H \rangle = 59.5872$
-  - $p=3$: $\langle H \rangle = 53.4994$
+  - $p=1$: $\langle H \rangle = 65.7614$
+  - $p=2$: $\langle H \rangle = 55.5915$
+  - $p=3$: $\langle H \rangle = 51.6248$
 - Parameter warm-starting at $p=3$ from depth $p=2$ outperformed all random restarts.
 
-#### Success and Feasibility Probabilities vs. Depth ($n = 14$)
+#### Success and Feasibility Probabilities vs. Depth ($n = 12$)
 ![Probability Scaling](results/p_sweep_probabilities.png)
 
-- **$P(\text{feasible})$**: Climbs to **$7.9621\%$** at $p=3$ (**72.4x enhancement** over the 14-qubit uniform baseline of $18 / 16384 = 0.110\%$).
-- **$P(\text{optimal})$**: Reaches **$0.4818\%$** at $p=3$ (**79.0x enhancement** over uniform $1 / 16384 = 0.0061\%$).
+- **$P(\text{feasible})$**: Climbs to **$13.5729\%$** at $p=3$ (**34.8x enhancement** over the 12-qubit uniform baseline of $16 / 4096 = 0.391\%$).
+- **$P(\text{optimal})$**: Reaches **$0.9189\%$** at $p=3$ (**37.6x enhancement** over uniform $1 / 4096 = 0.0244\%$).
 
 ---
 
@@ -164,24 +164,24 @@ The sweep demonstrates the theoretical trade-off: under-weighting ($\lambda < 1.
 
 ## 6. Hardware Feasibility & Noisy Aer Simulation
 
-An Aer depolarizing noise model was evaluated on the 14-qubit transpiled circuit:
+An Aer depolarizing noise model was evaluated on the 12-qubit transpiled circuit:
 - Single-qubit depolarizing error: $0.1\%$
 - Two-qubit gate ($CX$) depolarizing error: $1.0\%$
 - Shots: 8192 using noiseless optimal parameters
 
 | Metric | Ideal Statevector ($p=1$) | Aer Noisy Simulation ($p=1$, 8192 shots) |
 |---|:---:|:---:|
-| $P(\text{optimal})$ | 0.2300% | 0.0000% (0 / 8192) |
-| $P(\text{feasible})$ | 3.8893% | 0.1099% (9 / 8192) |
+| $P(\text{optimal})$ | 0.4015% | 0.0244% (2 / 8192) |
+| $P(\text{feasible})$ | 5.9531% | 0.2808% (23 / 8192) |
 
-*Observation:* With 150 CNOT gates at $p=1$ on 14 qubits, the accumulated circuit fidelity drops significantly under unmitigated physical gate noise. $P(\text{feasible})$ approaches the random guessing baseline ($0.110\%$), underscoring the critical need for error mitigation on physical NISQ processors.
+*Observation:* With 100 CNOT gates at $p=1$ on 12 qubits, accumulated circuit fidelity drops under unmitigated physical gate noise. $P(\text{feasible})$ approaches the random guessing baseline ($0.391\%$), underscoring the critical need for error mitigation on physical NISQ processors.
 
 ---
 
 ## 7. Honest Limitations & Scalability
 
-1. **No Quantum Advantage at $n = 14$:**
-   At 14 qubits, classical brute force enumerates all 16,384 states in 50 ms. QAOA is benchmarked to study algorithm mechanics, convergence properties, and depth trade-offs.
+1. **No Quantum Advantage at $n = 12$:**
+   At 12 qubits, classical brute force enumerates all 4,096 states in 50 ms. QAOA is benchmarked to study algorithm mechanics, convergence properties, and depth trade-offs.
 2. **Qubit Scaling:**
    Variables scale as $O(E \cdot S \cdot T)$. Without pruning, scaling beyond 20 EVs requires problem decomposition or classical hybrid clustering.
 3. **Landscape Trapping:**
